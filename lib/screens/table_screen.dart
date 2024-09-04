@@ -1,5 +1,6 @@
+import 'package:adisyon_app/models/basket_model.dart';
 import 'package:flutter/material.dart';
-import '../models/desk_group_model.dart';
+import '../models/desk_model.dart'; // desk_group_model yerine desk_model
 import '../models/category_model.dart';
 import '../services/api_service.dart';
 import 'product_screen.dart';
@@ -14,28 +15,70 @@ class TableScreen extends StatefulWidget {
 }
 
 class _TableScreenState extends State<TableScreen> {
-  late Future<List<DeskGroup>> tables;
+  late Future<List<Desk>> tables;
   late Future<List<Category>> categories;
 
   @override
   void initState() {
     super.initState();
-    tables = ApiService().getTablesByDeskGroup(widget.groupId);
+    tables = ApiService().getTablesByDeskGroups(widget.groupId); // Bu API çağrısının dönen modelin Desk olması gerektiğini unutmayın
     categories = ApiService().getCategories(); // Kategorileri al
   }
 
-  void _navigateToProductScreen(DeskGroup deskGroup) async {
+  Future<int> _getBranchIDFromUserInput() async {
+    return 1;
+  }
+
+  Future<int> _getCashierIDFromSession() async {
+    return 1;
+  }
+
+  Future<int> _getUserIDFromSession() async {
+    return 1;
+  }
+
+  void _navigateToProductScreen(Desk desk) async {
     final categoryList = await categories;
 
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => ProductScreen(
-          groupId: deskGroup.id,
-          categories: categoryList, // Kategorileri geçir
+          groupId: desk.deskGroupID, // Desk'in deskGroupID'sini kullan
+          categories: categoryList,
         ),
       ),
     );
+  }
+
+  Future<void> _activateDesk(Desk desk) async {
+    try {
+      final int branchID = await _getBranchIDFromUserInput();
+      final int cashierID = await _getCashierIDFromSession();
+      final int userID = await _getUserIDFromSession();
+
+      // Sepet (basket) oluşturma
+      final response = await ApiService().createBasket({
+        "BranchID": branchID,
+        "DeskID": desk.id, // Statik erişim yerine nesne üzerinden erişim
+        "CashierID": cashierID,
+        "Description": "Açıklama",
+        "Name": "ORMANİÇİ CAFE",
+        "OpenStatusID": desk.openStatusID, // Statik erişim yerine nesne üzerinden erişim
+        "UserID": userID,
+        "FatirsNo": ""
+      });
+
+      if (response != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Masa ${desk.name} aktif hale getirildi ve yeni bir sepet oluşturuldu!')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Sepet oluşturulurken bir hata oluştu: $e')),
+      );
+    }
   }
 
   @override
@@ -46,7 +89,7 @@ class _TableScreenState extends State<TableScreen> {
         backgroundColor: Colors.blueAccent,
         centerTitle: true,
       ),
-      body: FutureBuilder<List<DeskGroup>>(
+      body: FutureBuilder<List<Desk>>(
         future: tables,
         builder: (context, tableSnapshot) {
           if (tableSnapshot.connectionState == ConnectionState.waiting) {
@@ -64,10 +107,23 @@ class _TableScreenState extends State<TableScreen> {
               ),
               itemCount: tableSnapshot.data!.length,
               itemBuilder: (context, index) {
-                final deskGroup = tableSnapshot.data![index];
+                final desk = tableSnapshot.data![index];
                 return GestureDetector(
                   onTap: () {
-                    _navigateToProductScreen(deskGroup);
+                    _navigateToProductScreen(desk);
+                  },
+                  onLongPress: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('${desk.name} için işlemler'),
+                        action: SnackBarAction(
+                          label: 'Masayı Aktif Et',
+                          onPressed: () {
+                            _activateDesk(desk); // `Basket` yerine `desk` nesnesi gönderiliyor
+                          },
+                        ),
+                      ),
+                    );
                   },
                   child: Card(
                     shape: RoundedRectangleBorder(
@@ -79,7 +135,7 @@ class _TableScreenState extends State<TableScreen> {
                       children: [
                         Icon(Icons.table_restaurant, size: 50, color: Colors.blueAccent),
                         SizedBox(height: 10),
-                        Text(deskGroup.name, style: TextStyle(fontSize: 22)),
+                        Text(desk.name, style: TextStyle(fontSize: 22)),
                       ],
                     ),
                   ),
